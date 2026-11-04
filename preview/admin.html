@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Console | Hit Checker</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f172a; --sidebar: #1e293b; --card: #1e293b; --card-hover: #334155;
+    --border: #334155; --text: #f8fafc; --text-muted: #94a3b8;
+    --primary: #6366f1; --primary-hover: #4f46e5; --success: #10b981;
+    --warning: #f59e0b; --danger: #ef4444; --sky: #0ea5e9;
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.5; min-height: 100vh; display: flex; }
+  .sidebar { width: 260px; background-color: var(--sidebar); border-right: 1px solid var(--border); height: 100vh; position: fixed; left: 0; top: 0; display: flex; flex-direction: column; z-index: 100; }
+  .sidebar-header { padding: 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-box { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
+  .brand-name { font-weight: 700; font-size: 16px; letter-spacing: -0.025em; }
+  .nav-menu { flex: 1; padding: 12px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 4px; transition: all 0.2s; font-weight: 500; cursor: pointer; }
+  .nav-item:hover, .nav-item.active { background-color: var(--card-hover); color: var(--text); }
+  .nav-item.active { background-color: rgba(99, 102, 241, 0.1); color: var(--primary); }
+  .sidebar-footer { padding: 20px; border-top: 1px solid var(--border); }
+  .main-content { flex: 1; margin-left: 260px; padding: 24px; max-width: calc(100% - 260px); }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); margin-bottom: 24px; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .card-title { font-size: 16px; font-weight: 600; margin: 0; }
+  label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
+  input { width: 100%; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 14px; outline: none; }
+  input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+  .row-flex { display: flex; gap: 16px; align-items: flex-end; }
+  .row-flex > div { flex: 1; }
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 14px; border: 1px solid var(--border); background: var(--card-hover); color: var(--text); }
+  button.primary { background: var(--primary); border: none; color: white; }
+  button.primary:hover { background: var(--primary-hover); }
+  button.danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+  button.danger:hover { background: var(--danger); color: white; }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+  button.ghost:hover { background: var(--card-hover); color: var(--text); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .msg { font-size: 13px; margin-top: 12px; }
+  .msg-success { color: var(--success); }
+  .msg-danger { color: var(--danger); }
+  .auth-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .preview-banner { position: fixed; bottom: 16px; right: 16px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: var(--primary); padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; z-index: 9999; backdrop-filter: blur(8px); }
+  @media (max-width: 768px) { .sidebar { transform: translateX(-260px); } .main-content { margin-left: 0; max-width: 100%; } }
+</style>
+</head>
+<body>
+
+<div id="loginBox" class="auth-overlay">
+  <div style="width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 40px;">
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div class="logo-box" style="margin: 0 auto 16px; width: 48px; height: 48px; font-size: 24px;">🛡️</div>
+      <h2 style="font-size: 24px; font-weight: 700; margin: 0;">Restricted Access</h2>
+      <p style="color: var(--text-muted); margin: 8px 0 0;">Sign in to management console</p>
+    </div>
+    <div class="input-group" style="margin-bottom: 20px;">
+      <label>Admin Email</label>
+      <input id="aEmail" type="email" placeholder="admin@company.com">
+    </div>
+    <div class="input-group" style="margin-bottom: 20px;">
+      <label>Password</label>
+      <input id="aPass" type="password" placeholder="••••••••">
+    </div>
+    <button id="aLogin" class="primary" style="width: 100%;">Authorize Access</button>
+    <div id="aMsg" class="msg-danger" style="margin-top: 16px; text-align: center;"></div>
+  </div>
+</div>
+
+<div id="sidebar" class="sidebar" style="display:none">
+  <div class="sidebar-header">
+    <div class="logo-box">🛡️</div>
+    <span class="brand-name">ADMIN CONSOLE</span>
+  </div>
+  <div class="nav-menu">
+    <a href="./index.html" class="nav-item" style="text-decoration: none;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+      Scanner Dashboard
+    </a>
+    <div class="nav-item active">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      User Management
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <button id="aLogout" class="ghost" style="width: 100%; justify-content: flex-start; padding-left: 0;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      Sign Out
+    </button>
+  </div>
+</div>
+
+<div id="consoleBox" class="main-content" style="display:none">
+  <header class="top-bar">
+    <div class="page-title">
+      <h1>User Management</h1>
+      <p>Create and oversee application users.</p>
+    </div>
+    <span id="aWho" style="font-size: 12px; color: var(--text-muted); font-weight: 600;"></span>
+  </header>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Provision New Account</h3></div>
+    <div class="row-flex">
+      <div><label>Email Address</label><input id="newEmail" type="email" placeholder="user@example.com"></div>
+      <div><label>Password</label><input id="newPass" type="text" placeholder="Set temporary password"></div>
+      <button id="createBtn" class="primary" style="height: 42px;">Create User</button>
+    </div>
+    <div id="cMsg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Active Accounts (<span id="userCount">0</span>)</h3></div>
+    <div id="usersBox"></div>
+  </div>
+</div>
+
+<div class="preview-banner">PREVIEW MODE — Mock Data</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+function msg(el, text, ok) { el.textContent = text || ""; el.className = "msg " + (ok ? "msg-success" : "msg-danger"); }
+
+const MOCK_USERS = [
+  { email: "alice@company.com", created_at: "2024-10-15T09:30:00", mailbox_count: 12, test_count: 5 },
+  { email: "bob@agency.com", created_at: "2024-10-20T14:22:00", mailbox_count: 8, test_count: 3 },
+  { email: "carol@marketing.io", created_at: "2024-11-01T11:05:00", mailbox_count: 25, test_count: 12 },
+  { email: "dave@startup.co", created_at: "2024-11-03T16:45:00", mailbox_count: 3, test_count: 1 },
+];
+
+$("aLogin").addEventListener("click", () => {
+  $("loginBox").style.display = "none";
+  $("consoleBox").style.display = "block";
+  $("sidebar").style.display = "flex";
+  $("aWho").textContent = "admin@hitchecker.com";
+  loadUsers();
+});
+
+$("aLogout").addEventListener("click", () => {
+  $("loginBox").style.display = "flex";
+  $("consoleBox").style.display = "none";
+  $("sidebar").style.display = "none";
+});
+
+function loadUsers() {
+  const users = MOCK_USERS;
+  $("userCount").textContent = users.length;
+  let html = `<table><thead><tr>
+    <th>Email Identity</th><th>Created</th><th>Mailboxes</th><th>Tests</th><th style="text-align: right">Actions</th>
+  </tr></thead><tbody>`;
+  users.forEach((u) => {
+    html += `<tr>
+      <td style="font-weight: 600;">${esc(u.email)}</td>
+      <td style="color: var(--text-muted); font-size: 12px;">${esc(u.created_at || "—")}</td>
+      <td><span style="font-weight: 700;">${u.mailbox_count || 0}</span></td>
+      <td><span style="font-weight: 700;">${u.test_count || 0}</span></td>
+      <td style="text-align: right;">
+        <button class="ghost" data-reset="${esc(u.email)}" style="font-size: 11px;">Reset PW</button>
+        <button class="ghost danger" data-del="${esc(u.email)}" style="font-size: 11px;">Revoke Access</button>
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  $("usersBox").innerHTML = html;
+}
+
+$("createBtn").addEventListener("click", () => {
+  const email = $("newEmail").value.trim();
+  const password = $("newPass").value;
+  if (!email || !password) { msg($("cMsg"), "Email and password are required.", false); return; }
+  msg($("cMsg"), "Successfully created " + email, true);
+  $("newEmail").value = ""; $("newPass").value = "";
+  MOCK_USERS.push({ email: email, created_at: new Date().toISOString(), mailbox_count: 0, test_count: 0 });
+  loadUsers();
+});
+</script>
+</body>
+</html>

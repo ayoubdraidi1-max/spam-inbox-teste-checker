@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mailbox Hit Checker | Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f172a;
+    --sidebar: #1e293b;
+    --card: #1e293b;
+    --card-hover: #334155;
+    --border: #334155;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --primary: #6366f1;
+    --primary-hover: #4f46e5;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --sky: #0ea5e9;
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.5; min-height: 100vh; display: flex; }
+  .sidebar { width: 260px; background-color: var(--sidebar); border-right: 1px solid var(--border); height: 100vh; position: fixed; left: 0; top: 0; display: flex; flex-direction: column; z-index: 100; }
+  .sidebar-header { padding: 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-box { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
+  .brand-name { font-weight: 700; font-size: 16px; letter-spacing: -0.025em; }
+  .nav-menu { flex: 1; padding: 12px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 4px; transition: all 0.2s; font-weight: 500; cursor: pointer; }
+  .nav-item:hover, .nav-item.active { background-color: var(--card-hover); color: var(--text); }
+  .nav-item.active { background-color: rgba(99, 102, 241, 0.1); color: var(--primary); }
+  .sidebar-footer { padding: 20px; border-top: 1px solid var(--border); }
+  .user-info { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .user-avatar { width: 36px; height: 36px; background: var(--card-hover); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--primary); }
+  .user-details { overflow: hidden; }
+  .user-email { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-role { display: block; font-size: 11px; color: var(--text-muted); }
+  .main-content { flex: 1; margin-left: 260px; padding: 24px; max-width: calc(100% - 260px); }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
+  .page-title p { margin: 4px 0 0; color: var(--text-muted); font-size: 14px; }
+  .top-actions { display: flex; align-items: center; gap: 12px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); }
+  .stat-card .label { display: block; color: var(--text-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-card .value { font-size: 28px; font-weight: 700; }
+  .stat-card.primary .value { color: var(--primary); }
+  .stat-card.success .value { color: var(--success); }
+  .stat-card.warning .value { color: var(--warning); }
+  .stat-card.sky .value { color: var(--sky); }
+  .dashboard-grid { display: grid; grid-template-columns: 1fr 380px; gap: 24px; margin-bottom: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .card-title { font-size: 16px; font-weight: 600; margin: 0; }
+  label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
+  textarea, input, select { width: 100%; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+  textarea:focus, input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+  textarea { font-family: 'JetBrains Mono', monospace; font-size: 13px; min-height: 180px; resize: vertical; }
+  .input-group { margin-bottom: 20px; }
+  .row-flex { display: flex; gap: 16px; margin-bottom: 20px; }
+  .row-flex > * { flex: 1; }
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 14px; border: 1px solid var(--border); background: var(--card-hover); color: var(--text); }
+  button:hover:not(:disabled) { background: #475569; border-color: #64748b; }
+  button.primary { background: var(--primary); border: none; color: white; }
+  button.primary:hover:not(:disabled) { background: var(--primary-hover); box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); }
+  button.danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); }
+  button.danger:hover:not(:disabled) { background: var(--danger); color: white; }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+  button.ghost:hover:not(:disabled) { background: var(--card-hover); color: var(--text); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .progress-section { margin-bottom: 24px; }
+  .progress-info { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+  .progress-bar-container { height: 10px; background: #0f172a; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+  .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), var(--sky)); transition: width 0.3s ease; }
+  .log-container { height: 300px; background: #000; border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #10b981; overflow-y: auto; border: 1px solid var(--border); }
+  .table-container { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr.main-row { cursor: pointer; transition: background 0.1s; }
+  tr.main-row:hover { background: rgba(99, 102, 241, 0.05); }
+  .badge { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+  .badge-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+  .badge-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+  .badge-sky { background: rgba(14, 165, 233, 0.1); color: var(--sky); }
+  .auth-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .auth-card { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 40px; box-shadow: var(--shadow-lg); }
+  .auth-header { text-align: center; margin-bottom: 32px; }
+  .auth-header .logo-box { margin: 0 auto 16px; width: 48px; height: 48px; font-size: 24px; }
+  .auth-header h2 { font-size: 24px; font-weight: 700; margin: 0; }
+  .auth-header p { color: var(--text-muted); margin: 8px 0 0; }
+  .auth-footer { text-align: center; margin-top: 24px; font-size: 13px; color: var(--text-muted); }
+  .hidden { display: none !important; }
+  .text-success { color: var(--success); }
+  .text-danger { color: var(--danger); }
+  .text-warning { color: var(--warning); }
+  .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--card-hover); }
+  .status-pill { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: rgba(148, 163, 184, 0.1); color: var(--text-muted); }
+  .status-pill.active { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+  .status-pill.done { background: rgba(99, 102, 241, 0.1); color: var(--primary); }
+  .preview-banner { position: fixed; bottom: 16px; right: 16px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: var(--primary); padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; z-index: 9999; backdrop-filter: blur(8px); }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .animate-spin { animation: spin 1s linear infinite; }
+  @media (max-width: 900px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .sidebar { transform: translateX(-260px); }
+    .main-content { margin-left: 0; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- AUTH OVERLAY -->
+<div id="authShell" class="auth-overlay" style="display:none">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="logo-box">📬</div>
+      <h2>Welcome Back</h2>
+      <p>Sign in to your dashboard</p>
+    </div>
+    <div class="input-group">
+      <label>Email Address</label>
+      <input id="authEmail" type="email" placeholder="name@company.com" autocomplete="username">
+    </div>
+    <div class="input-group">
+      <label>Password</label>
+      <input id="authPass" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button id="authSubmit" class="primary" style="width: 100%; margin-top: 8px;">Sign In</button>
+    <div id="authMsg" class="text-danger" style="margin-top: 16px; text-align: center; font-size: 13px;"></div>
+    <div class="auth-footer">Accounts are managed by the administrator.</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar" class="sidebar" style="display:none">
+  <div class="sidebar-header">
+    <div class="logo-box">📬</div>
+    <span class="brand-name">HIT CHECKER</span>
+  </div>
+  <div class="nav-menu">
+    <div class="nav-item active">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+      Dashboard
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-info">
+      <div class="user-avatar" id="avatarLetter">D</div>
+      <div class="user-details">
+        <span class="user-email" id="whoami">demo@hitchecker.com</span>
+        <span class="user-role">Account Manager</span>
+      </div>
+    </div>
+    <button id="logoutBtn" class="ghost" style="width: 100%; justify-content: flex-start; padding-left: 0;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      Sign Out
+    </button>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div id="appShell" class="main-content" style="display:none">
+  <header class="top-bar">
+    <div class="page-title">
+      <h1>Scanner Dashboard</h1>
+      <p>Monitor your mailbox hits in real-time.</p>
+    </div>
+    <div class="top-actions">
+      <span id="statusPill" class="status-pill">IDLE</span>
+      <span id="elapsed" style="font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 12px;">0s</span>
+    </div>
+  </header>
+
+  <div class="stats-grid">
+    <div class="stat-card primary"><span class="label">Inputs Scanned</span><div class="value" id="statInputs">0</div></div>
+    <div class="stat-card sky"><span class="label">Active Mailboxes</span><div class="value" id="statMailboxes">0</div></div>
+    <div class="stat-card warning"><span class="label">Spam Hits</span><div class="value" id="statSpam">0</div></div>
+    <div class="stat-card success"><span class="label">Inbox Hits</span><div class="value" id="statInbox">0</div></div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="left-col">
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header"><h3 class="card-title">Configuration</h3></div>
+        <div class="input-group">
+          <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label style="margin-bottom:0">Mailboxes (email:password)</label>
+            <button id="saveMboxBtn" class="ghost" style="padding: 2px 8px; font-size: 11px;">Save to Server</button>
+          </div>
+          <textarea id="mailboxes" placeholder="user@gmail.com:password">user1@gmail.com:apppassword123
+user2@yahoo.com:apppassword456
+user3@outlook.com:apppassword789</textarea>
+          <div id="mboxState" style="font-size: 11px; margin-top: 4px; color: var(--text-muted);"></div>
+        </div>
+        <div class="input-group">
+          <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label style="margin-bottom:0">Search Inputs</label>
+            <div style="display:flex; gap: 8px;">
+              <select id="testSelect" style="width: 150px; padding: 4px 8px; font-size: 11px; height: auto;">
+                <option value="">— Saved Tests —</option>
+                <option value="Promo Links">Promo Links</option>
+                <option value="Tracking IDs">Tracking IDs</option>
+              </select>
+              <button id="loadTestBtn" class="ghost" style="padding: 2px 8px; font-size: 11px;">Load</button>
+            </div>
+          </div>
+          <textarea id="inputs" placeholder="Enter links or text to find...">https://example.com/promo/summer2024
+https://tracking.link/abc123
+special-offer-code-XYZ789
+newsletter@brand.com
+https://short.link/welcome</textarea>
+        </div>
+        <div style="margin-top: 8px; display: flex; gap: 8px;">
+          <button id="saveTestBtn" class="ghost" style="font-size: 11px;">Save Test</button>
+          <button id="deleteTestBtn" class="ghost danger" style="font-size: 11px;">Delete Test</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Scan Settings</h3></div>
+        <div class="row-flex">
+          <div class="input-group"><label>Search Mode</label>
+            <select id="mode">
+              <option value="turbo" selected>Super Turbo</option>
+              <option value="hybrid">Hybrid Mode</option>
+              <option value="accurate">Accurate Scan</option>
+              <option value="fast">Fast Search</option>
+            </select>
+          </div>
+          <div class="input-group"><label>Parallel Conns</label><input id="threads" type="number" min="1" max="50" value="8"></div>
+        </div>
+        <div class="row-flex">
+          <div class="input-group"><label>First Emails (Oldest)</label><input id="firstEmails" type="number" min="0" value="0"></div>
+          <div class="input-group"><label>Last Emails (Newest)</label><input id="maxEmails" type="number" min="0" value="0"></div>
+        </div>
+        <div style="display: flex; gap: 12px; margin-top: 12px;">
+          <button id="startBtn" class="primary" style="flex: 1; height: 44px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Start Analysis
+          </button>
+          <button id="stopBtn" class="danger" disabled style="flex: 1; height: 44px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
+            Stop
+          </button>
+        </div>
+        <button id="resetBtn" class="ghost" style="width: 100%; margin-top: 12px; font-size: 11px; opacity: 0.5;">Force System Reset</button>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="card-header"><h3 class="card-title">Scan Status</h3></div>
+        <div class="progress-section">
+          <div class="progress-info"><span id="progressText">0 / 0 folders</span><span id="percentText">0%</span></div>
+          <div class="progress-bar-container"><div id="bar" class="progress-bar-fill"></div></div>
+          <div id="currentText" style="font-size: 11px; color: var(--text-muted); margin-top: 8px; font-weight: 500;">Ready to start scan</div>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column;">
+          <label>Activity Log</label>
+          <div class="log-container" id="log">Waiting for initiation...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Scan Results</h3>
+      <div style="display: flex; gap: 8px;">
+        <button id="copyBtn" class="ghost" style="font-size: 12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          Copy Results
+        </button>
+        <button id="downloadBtn" class="ghost" style="font-size: 12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Export
+        </button>
+      </div>
+    </div>
+    <div id="resultsBox" class="table-container">
+      <div style="text-align: center; padding: 40px; color: var(--text-muted);">No analysis data available.</div>
+    </div>
+  </div>
+</div>
+
+<div class="preview-banner">PREVIEW MODE — Mock Data</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+
+const MOCK_RESULTS = {
+  inputs: [
+    { text: "https://example.com/promo/summer2024", spam: 3, inbox: 7, mailboxes: [
+      { email: "user1@gmail.com", status: "ok", inbox: 5, spam: 2, previews: [
+        { folder: "inbox", from: "promos@brand.com", subject: "Summer Sale 2024 - Up to 70% Off!", date: "2024-08-15 10:32", snippet: "Check out our exclusive summer collection at https://example.com/promo/summer2024 with massive discounts on all items..." },
+        { folder: "inbox", from: "deals@newsletter.com", subject: "Your summer promo is here", date: "2024-08-14 14:21", snippet: "Don't miss the summer2024 promo link we saved for you. Limited time offer expires soon..." },
+        { folder: "spam", from: "spam@unknown.xyz", subject: "Click here for summer deals", date: "2024-08-13 08:15", snippet: "We found https://example.com/promo/summer2024 matching your interest. Click now before it expires..." },
+      ]},
+      { email: "user2@yahoo.com", status: "ok", inbox: 2, spam: 1, previews: [
+        { folder: "inbox", from: "marketing@shop.com", subject: "RE: Your summer order", date: "2024-08-12 16:44", snippet: "Thank you for using https://example.com/promo/summer2024 to place your order. Your tracking number is..." },
+      ]},
+      { email: "user3@outlook.com", status: "error", inbox: 0, spam: 0, error: "Login failed", previews: [] },
+    ]},
+    { text: "https://tracking.link/abc123", spam: 1, inbox: 4, mailboxes: [
+      { email: "user1@gmail.com", status: "ok", inbox: 3, spam: 0, previews: [
+        { folder: "inbox", from: "notifications@service.com", subject: "Tracking update for your shipment", date: "2024-08-15 12:00", snippet: "Your package tracking link https://tracking.link/abc123 has been updated. Expected delivery: 2-3 business days..." },
+      ]},
+      { email: "user2@yahoo.com", status: "ok", inbox: 1, spam: 1, previews: [
+        { folder: "spam", from: "suspicious@fake.com", subject: "Verify your tracking", date: "2024-08-14 20:33", snippet: "Please verify your tracking at https://tracking.link/abc123. This is an automated message..." },
+      ]},
+      { email: "user3@outlook.com", status: "error", inbox: 0, spam: 0, error: "Login failed", previews: [] },
+    ]},
+    { text: "special-offer-code-XYZ789", spam: 5, inbox: 2, mailboxes: [
+      { email: "user1@gmail.com", status: "ok", inbox: 1, spam: 3, previews: [
+        { folder: "spam", from: "offers@promo.xyz", subject: "EXCLUSIVE: Your code XYZ789 inside!", date: "2024-08-15 06:12", snippet: "Use special-offer-code-XYZ789 at checkout for 50% off your entire purchase. Hurry, this offer won't last..." },
+      ]},
+      { email: "user2@yahoo.com", status: "ok", inbox: 1, spam: 2, previews: [
+        { folder: "inbox", from: "rewards@loyalty.com", subject: "Your special reward", date: "2024-08-14 18:55", snippet: "We've applied special-offer-code-XYZ789 to your account. Redeem it on your next visit for bonus points..." },
+      ]},
+      { email: "user3@outlook.com", status: "error", inbox: 0, spam: 0, error: "Login failed", previews: [] },
+    ]},
+    { text: "newsletter@brand.com", spam: 2, inbox: 6, mailboxes: [
+      { email: "user1@gmail.com", status: "ok", inbox: 4, spam: 1, previews: [
+        { folder: "inbox", from: "newsletter@brand.com", subject: "Weekly Digest - Top Stories", date: "2024-08-15 09:00", snippet: "Welcome to this week's curated selection. Read the full newsletter@brand.com edition online..." },
+      ]},
+      { email: "user2@yahoo.com", status: "ok", inbox: 2, spam: 1, previews: [] },
+      { email: "user3@outlook.com", status: "error", inbox: 0, spam: 0, error: "Login failed", previews: [] },
+    ]},
+    { text: "https://short.link/welcome", spam: 0, inbox: 3, mailboxes: [
+      { email: "user1@gmail.com", status: "ok", inbox: 2, spam: 0, previews: [
+        { folder: "inbox", from: "hello@startup.io", subject: "Welcome aboard!", date: "2024-08-15 11:20", snippet: "Thanks for signing up! Get started here: https://short.link/welcome and explore all the features we offer..." },
+      ]},
+      { email: "user2@yahoo.com", status: "ok", inbox: 1, spam: 0, previews: [] },
+      { email: "user3@outlook.com", status: "error", inbox: 0, spam: 0, error: "Login failed", previews: [] },
+    ]},
+  ],
+  mailboxes: [
+    { email: "user1@gmail.com", status: "ok", inbox_total: 3421, spam_total: 87, folders: { inbox: "INBOX", spam: "[Gmail]/Spam" } },
+    { email: "user2@yahoo.com", status: "ok", inbox_total: 1856, spam_total: 44, folders: { inbox: "INBOX", spam: "Bulk Mail" } },
+    { email: "user3@outlook.com", status: "error", inbox_total: 0, spam_total: 0, error: "Login failed", folders: {} },
+  ],
+};
+
+const MOCK_LOG = [
+  "[10:32:01] Started — 3 mailbox(es), 5 input(s), mode=turbo",
+  "[10:32:02] → user1@gmail.com connected (8 folders, spam=[Gmail]/Spam)",
+  "[10:32:03] → user2@yahoo.com connected (6 folders, spam=Bulk Mail)",
+  "[10:32:04] ✗ user3@outlook.com — Login failed — wrong password (app password may be required)",
+  "[10:32:05] … user1@gmail.com — scanning INBOX",
+  "[10:32:06] … user2@yahoo.com — scanning INBOX",
+  "[10:32:08] ✓ user1@gmail.com — inbox (INBOX): 3421 emails, 4 inputs hit",
+  "[10:32:09] … user1@gmail.com — scanning [Gmail]/Spam",
+  "[10:32:10] ✓ user2@yahoo.com — inbox (INBOX): 1856 emails, 4 inputs hit",
+  "[10:32:11] … user2@yahoo.com — scanning Bulk Mail",
+  "[10:32:13] ✓ user1@gmail.com — spam ([Gmail]/Spam): 87 emails, 3 inputs hit",
+  "[10:32:14] ✓ user2@yahoo.com — spam (Bulk Mail): 44 emails, 2 inputs hit",
+  "[10:32:15] Finished in 13.0s (complete)",
+];
+
+let isScanning = false;
+let logIndex = 0;
+let progressVal = 0;
+let progressTotal = 6;
+let scanTimer = null;
+let logTimer = null;
+let startedAt = null;
+
+function showLogin() {
+  $("authShell").style.display = "flex";
+  $("sidebar").style.display = "none";
+  $("appShell").style.display = "none";
+}
+
+function showApp() {
+  $("authShell").style.display = "none";
+  $("sidebar").style.display = "flex";
+  $("appShell").style.display = "block";
+  renderResults(MOCK_RESULTS);
+}
+
+$("authSubmit").addEventListener("click", () => {
+  showApp();
+});
+
+$("authPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("authSubmit").click(); });
+
+$("logoutBtn").addEventListener("click", () => { showLogin(); });
+
+$("saveMboxBtn").addEventListener("click", () => {
+  const count = $("mailboxes").value.split("\n").filter(l => l.trim()).length;
+  $("mboxState").textContent = "✓ Saved " + count + " mailboxes";
+  $("mboxState").className = "text-success";
+});
+
+$("loadTestBtn").addEventListener("click", () => {
+  const name = $("testSelect").value;
+  if (!name) return;
+  if (name === "Promo Links") $("inputs").value = "https://example.com/promo/summer2024\nhttps://tracking.link/abc123\nspecial-offer-code-XYZ789";
+  if (name === "Tracking IDs") $("inputs").value = "newsletter@brand.com\nhttps://short.link/welcome";
+});
+
+$("saveTestBtn").addEventListener("click", () => { prompt("Name for this test set:"); });
+$("deleteTestBtn").addEventListener("click", () => { if (confirm("Delete test?")) {} });
+
+$("startBtn").addEventListener("click", () => {
+  if (isScanning) return;
+  isScanning = true;
+  startedAt = Date.now();
+  logIndex = 0;
+  progressVal = 0;
+  $("startBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  $("statusPill").textContent = "SCANNING";
+  $("statusPill").className = "status-pill active";
+  $("log").textContent = "";
+  $("resultsBox").innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Scanning in progress...</div>';
+
+  scanTimer = setInterval(() => {
+    progressVal++;
+    const pct = Math.min(100, Math.round((progressVal / progressTotal) * 100));
+    $("bar").style.width = pct + "%";
+    $("progressText").textContent = progressVal + " / " + progressTotal + " folders";
+    $("percentText").textContent = pct + "%";
+    $("elapsed").textContent = Math.round((Date.now() - startedAt) / 1000) + "s";
+    if (progressVal >= progressTotal) {
+      clearInterval(scanTimer);
+      scanTimer = null;
+      isScanning = false;
+      $("startBtn").disabled = false;
+      $("stopBtn").disabled = true;
+      $("statusPill").textContent = "COMPLETED";
+      $("statusPill").className = "status-pill done";
+      $("currentText").textContent = "Scan complete";
+      renderResults(MOCK_RESULTS);
+    }
+  }, 800);
+
+  logTimer = setInterval(() => {
+    if (logIndex < MOCK_LOG.length) {
+      const box = $("log");
+      box.textContent = box.textContent ? box.textContent + "\n" + MOCK_LOG[logIndex] : MOCK_LOG[logIndex];
+      box.scrollTop = box.scrollHeight;
+      $("currentText").textContent = MOCK_LOG[logIndex].replace(/^\[\d+:\d+:\d+\]\s/, "");
+      logIndex++;
+    } else {
+      clearInterval(logTimer);
+      logTimer = null;
+    }
+  }, 900);
+});
+
+$("stopBtn").addEventListener("click", () => {
+  if (scanTimer) clearInterval(scanTimer);
+  if (logTimer) clearInterval(logTimer);
+  isScanning = false;
+  $("startBtn").disabled = false;
+  $("stopBtn").disabled = true;
+  $("statusPill").textContent = "IDLE";
+  $("statusPill").className = "status-pill";
+  $("currentText").textContent = "Stopped by user";
+});
+
+$("resetBtn").addEventListener("click", () => {
+  if (confirm("Reset system state?")) {
+    $("bar").style.width = "0%";
+    $("progressText").textContent = "0 / 0 folders";
+    $("percentText").textContent = "0%";
+    $("currentText").textContent = "Ready to start scan";
+    $("log").textContent = "Waiting for initiation...";
+    $("resultsBox").innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">No analysis data available.</div>';
+    $("statusPill").textContent = "IDLE";
+    $("statusPill").className = "status-pill";
+    $("statInputs").textContent = "0";
+    $("statMailboxes").textContent = "0";
+    $("statSpam").textContent = "0";
+    $("statInbox").textContent = "0";
+  }
+});
+
+const expandedRows = new Set();
+let currentSort = { key: "none", dir: "desc" };
+
+function handleSort(key) {
+  if (currentSort.key === key) currentSort.dir = currentSort.dir === "desc" ? "asc" : "desc";
+  else { currentSort.key = key; currentSort.dir = "desc"; }
+  renderResults(window.__lastResults);
+}
+
+function renderResults(results) {
+  let inputs = [...(results.inputs || [])];
+  const mailboxes = results.mailboxes || [];
+  const okOf = (m) => m.status === "ok" || m.status === "running";
+
+  if (currentSort.key !== "none") {
+    inputs.sort((a, b) => {
+      const valA = a[currentSort.key] || 0;
+      const valB = b[currentSort.key] || 0;
+      return currentSort.dir === "desc" ? valB - valA : valA - valB;
+    });
+  }
+
+  let totalSpam = 0, totalInbox = 0;
+  (results.inputs || []).forEach((i) => { totalSpam += i.spam; totalInbox += i.inbox; });
+  const okMailboxes = mailboxes.filter(okOf).length;
+
+  $("statInputs").textContent = inputs.length;
+  $("statMailboxes").textContent = okMailboxes;
+  $("statSpam").textContent = totalSpam;
+  $("statInbox").textContent = totalInbox;
+
+  const box = $("resultsBox");
+  if (!inputs.length) { box.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">No analysis data available.</div>'; return; }
+
+  const sortIcon = (key) => {
+    if (currentSort.key !== key) return "↕";
+    return currentSort.dir === "desc" ? "↓" : "↑";
+  };
+
+  let html = `<table><thead><tr>
+    <th style="width: 50px">#</th>
+    <th>Search Input</th>
+    <th style="width: 100px; cursor:pointer" onclick="handleSort('spam')">Spam ${sortIcon('spam')}</th>
+    <th style="width: 100px; cursor:pointer" onclick="handleSort('inbox')">Inbox ${sortIcon('inbox')}</th>
+    <th>Matches In</th>
+  </tr></thead><tbody>`;
+
+  inputs.forEach((item, idx) => {
+    const found = (item.mailboxes || []).filter((m) => okOf(m) && (m.spam + m.inbox) > 0);
+    const badges = found.length
+      ? found.map((m) => `<span class="badge badge-sky" style="margin-right: 4px; margin-bottom: 4px;">${esc(m.email)}: <b>${m.spam + m.inbox}</b></span>`).join("")
+      : `<span class="badge" style="background: rgba(148, 163, 184, 0.05);">No hits</span>`;
+
+    const itemKey = item.text;
+    const open = expandedRows.has(itemKey);
+    const shortText = item.text.length > 80 ? item.text.substring(0, 80) + "..." : item.text;
+
+    html += `<tr class="main-row" data-idx="${idx}" data-key="${esc(itemKey)}">
+      <td style="color: var(--text-muted); font-weight: 600;">${idx + 1}</td>
+      <td class="truncate" title="${esc(itemKey)}">${esc(shortText)}</td>
+      <td class="text-warning" style="font-weight: 700;">${item.spam}</td>
+      <td class="text-success" style="font-weight: 700;">${item.inbox}</td>
+      <td><div style="display: flex; flex-wrap: wrap;">${badges}</div></td>
+    </tr>`;
+
+    if (open) {
+      let detailHtml = '<div style="padding: 8px 0;">';
+      (item.mailboxes || []).forEach(m => {
+        if (m.status === 'error') {
+          detailHtml += `<div style="background: rgba(239,68,68,0.05); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+            <span style="font-weight: 600; color: var(--danger);">${esc(m.email)}</span>
+            <span class="badge badge-danger" style="margin-left: 8px;">${esc(m.error || 'Error')}</span>
+          </div>`;
+          return;
+        }
+        if (m.inbox === 0 && m.spam === 0) return;
+        detailHtml += `
+          <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight: 600; color: var(--sky);">${esc(m.email)}</span>
+              <div>
+                <span class="badge badge-success" style="margin-right: 4px;">Inbox: ${m.inbox}</span>
+                <span class="badge badge-warning">Spam: ${m.spam}</span>
+              </div>
+            </div>
+            ${(m.previews || []).map(p => `
+              <div style="font-size: 12px; padding: 8px; border-left: 2px solid var(--primary); background: rgba(99, 102, 241, 0.05); margin-top: 6px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="font-weight: 700; color: ${p.folder === 'spam' ? 'var(--warning)' : 'var(--success)'};">${p.folder.toUpperCase()}</span>
+                  <span style="color: var(--text-muted); font-size: 11px;">${esc(p.date || '')}</span>
+                </div>
+                <div style="font-weight: 600;">From: ${esc(p.from)}</div>
+                <div style="color: var(--text-muted); margin-top: 2px;">Subject: ${esc(p.subject)}</div>
+                <div style="margin-top: 4px; font-style: italic; color: #cbd5e1;">"...${esc(p.snippet)}..."</div>
+              </div>
+            `).join('')}
+          </div>`;
+      });
+      detailHtml += '</div>';
+      html += `<tr class="detail-row"><td colspan="5" style="background: rgba(15, 23, 42, 0.2); padding: 0 24px;">${detailHtml}</td></tr>`;
+    }
+  });
+  html += "</tbody></table>";
+  box.innerHTML = html;
+
+  box.querySelectorAll("tr.main-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const key = row.dataset.key;
+      if (expandedRows.has(key)) expandedRows.delete(key); else expandedRows.add(key);
+      renderResults(window.__lastResults);
+    });
+  });
+  window.__lastResults = results;
+}
+
+$("copyBtn").addEventListener("click", () => {
+  const res = window.__lastResults;
+  if (!res) return;
+  const lines = (res.inputs || []).map(i => `${i.text}:${i.spam}:${i.inbox}`).join("\n");
+  navigator.clipboard.writeText(lines).then(() => alert("Results copied to clipboard."));
+});
+
+$("downloadBtn").addEventListener("click", () => {
+  const res = window.__lastResults;
+  if (!res) return;
+  const content = (res.inputs || []).map(i => `${i.text}:${i.spam}:${i.inbox}`).join("\n");
+  const blob = new Blob([content], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `scan-report-${new Date().getTime()}.txt`;
+  a.click();
+});
+
+// Show login screen immediately
+showLogin();
+</script>
+</body>
+</html>
