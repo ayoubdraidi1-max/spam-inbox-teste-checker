@@ -558,11 +558,12 @@
     <button id="authSubmit" class="primary" style="width: 100%; margin-top: 8px;">
       Sign In
     </button>
+    <button id="authMode" class="ghost" type="button" style="width: 100%; margin-top: 8px;">Create the first account</button>
     
     <div id="authMsg" class="text-danger" style="margin-top: 16px; text-align: center; font-size: 13px;"></div>
 
-    <div class="auth-footer">
-      Accounts are managed by the administrator.
+    <div class="auth-footer" id="authFooter">
+      The first account becomes the administrator.
     </div>
   </div>
 </div>
@@ -800,9 +801,17 @@ function restorePrefs() {
   $(id).addEventListener("change", savePrefs));
 
 /* -------- Authentication -------- */
+let authSignup = false;
 function authMsg(text) {
   $("authMsg").textContent = text || "";
 }
+$("authMode").addEventListener("click", () => {
+  authSignup = !authSignup;
+  $("authSubmit").textContent = authSignup ? "Create Account" : "Sign In";
+  $("authMode").textContent = authSignup ? "Back to sign in" : "Create the first account";
+  $("authFooter").textContent = authSignup ? "The first account becomes the administrator." : "Use an account created by the administrator.";
+  authMsg("");
+});
 
 $("authSubmit").addEventListener("click", async () => {
   const email = $("authEmail").value.trim();
@@ -811,13 +820,13 @@ $("authSubmit").addEventListener("click", async () => {
   
   $("authSubmit").disabled = true;
   try {
-    const res = await fetch("/api/login", {
+    const res = await fetch(authSignup ? "/api/signup" : "/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password: pass }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { authMsg(data.error || "Login failed."); $("authSubmit").disabled = false; return; }
+    if (!res.ok) { authMsg(data.error || (authSignup ? "Account creation failed." : "Login failed.")); $("authSubmit").disabled = false; return; }
     await boot();
   } catch (e) {
     authMsg("Server unreachable.");

