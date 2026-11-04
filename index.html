@@ -766,10 +766,14 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import { supabase } from "/src/supabaseClient.js";
+
 const $ = (id) => document.getElementById(id);
 const STORE_KEY = "mailbox-hit-checker-prefs";
+const EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 let ME = null;
+let scanning = false;
 
 function esc(value) {
   return String(value == null ? "" : value)
@@ -817,19 +821,28 @@ $("authSubmit").addEventListener("click", async () => {
   const email = $("authEmail").value.trim();
   const pass = $("authPass").value;
   if (!email || !pass) { authMsg("Missing credentials."); return; }
-  
+
   $("authSubmit").disabled = true;
   try {
-    const res = await fetch(authSignup ? "/api/signup" : "/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: pass }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { authMsg(data.error || (authSignup ? "Account creation failed." : "Login failed.")); $("authSubmit").disabled = false; return; }
+    let result;
+    if (authSignup) {
+      result = await supabase.auth.signUp({ email, password: pass });
+      if (result.error) { authMsg(result.error.message || "Account creation failed."); $("authSubmit").disabled = false; return; }
+      if (result.data.user && !result.data.session) {
+        authMsg("Account created. Please sign in.");
+        authSignup = false;
+        $("authSubmit").textContent = "Sign In";
+        $("authMode").textContent = "Create the first account";
+        $("authSubmit").disabled = false;
+        return;
+      }
+    } else {
+      result = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (result.error) { authMsg(result.error.message || "Login failed."); $("authSubmit").disabled = false; return; }
+    }
     await boot();
   } catch (e) {
-    authMsg("Server unreachable.");
+    authMsg("Connection error.");
     $("authSubmit").disabled = false;
   }
 });
@@ -837,7 +850,7 @@ $("authSubmit").addEventListener("click", async () => {
 $("authPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("authSubmit").click(); });
 
 $("logoutBtn").addEventListener("click", async () => {
-  await fetch("/api/logout", { method: "POST" });
+  await supabase.auth.signOut();
   location.reload();
 });
 
@@ -849,14 +862,11 @@ function markMboxState(text, ok) {
 }
 
 $("saveMboxBtn").addEventListener("click", async () => {
-  const res = await fetch("/api/save_mailboxes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mailboxes: $("mailboxes").value }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { markMboxState(data.error || "Failed", false); return; }
-  markMboxState(`✓ Saved ${data.mailbox_count} mailboxes`, true);
+  const mailboxes = $("mailboxes").value;
+  const { error } = await supabase.from("profiles").update({ mailboxes }).eq("id", ME.id);
+  if (error) { markMboxState("Could not save", false); return; }
+  const count = mailboxes.split("\n").filter((l) => l.trim()).length;
+  markMboxState(`✓ Saved ${count} mailboxes`, true);
 });
 
 /* -------- Test Presets -------- */
@@ -872,8 +882,9 @@ function renderTests() {
 
 async function loadTests() {
   try {
-    const data = await (await fetch("/api/tests")).json();
-    TESTS = data.tests || [];
+    const { data, error } = await supabase.from("test_presets").select("name,inputs,saved_at").eq("user_id", ME.id).order("saved_at", { ascending: true });
+    if (error) { TESTS = []; }
+    else TESTS = data || [];
   } catch (e) { TESTS = []; }
   renderTests();
 }
@@ -883,13 +894,8 @@ $("saveTestBtn").addEventListener("click", async () => {
   if (!inputs.trim()) return;
   const name = prompt("Name for this test set:");
   if (!name) return;
-  const res = await fetch("/api/tests", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, inputs }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok) { TESTS = data.tests || []; renderTests(); $("testSelect").value = name; savePrefs(); }
+  const { error } = await supabase.from("test_presets").upsert({ user_id: ME.id, name, inputs, saved_at: new Date().toISOString() }, { onConflict: "user_id,name" });
+  if (!error) { await loadTests(); $("testSelect").value = name; savePrefs(); }
 });
 
 $("loadTestBtn").addEventListener("click", () => {
@@ -902,102 +908,161 @@ $("loadTestBtn").addEventListener("click", () => {
 $("deleteTestBtn").addEventListener("click", async () => {
   const name = $("testSelect").value;
   if (!name || !confirm(`Delete test "${name}"?`)) return;
-  const res = await fetch("/api/tests/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok) { TESTS = data.tests || []; renderTests(); }
+  const { error } = await supabase.from("test_presets").delete().eq("user_id", ME.id).eq("name", name);
+  if (!error) await loadTests();
 });
 
 /* -------- Scan Engine Control -------- */
 let polling = null;
 let startedAt = null;
 
-$("startBtn").addEventListener("click", async () => {
-  try {
-    console.log("Start button clicked");
-    const mailboxes = $("mailboxes").value.trim();
-    const inputs = $("inputs").value.trim();
-    
-    if (!mailboxes || !inputs) {
-      alert("Please enter both mailboxes and search inputs before starting.");
-      return;
-    }
-
-    const body = {
-      mailboxes: mailboxes,
-      inputs: inputs,
-      mode: $("mode").value,
-      first_emails: Number($("firstEmails").value) || 0,
-      max_emails: Number($("maxEmails").value) || 0,
-      threads: Number($("threads").value) || 8,
-      turbo_conns: Number($("threads").value) || 8,
-      previews: 5,
-    };
-    
-    console.log("Starting scan with payload:", body);
-    savePrefs();
-    
-    $("startBtn").disabled = true;
-    $("startBtn").innerHTML = '<svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"></path></svg> Initializing...';
-
-    const res = await fetch("/api/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    
-    console.log("Fetch /api/start response status:", res.status);
-    const data = await res.json().catch(() => ({}));
-    
-    if (!res.ok) { 
-      console.error("Start failed:", data);
-      alert(data.error || "Start failed"); 
-      resetStartBtn();
-      return; 
-    }
-    
-    console.log("Scan started successfully");
-    startedAt = Date.now();
-    startPolling();
-  } catch (e) {
-    console.error("CRITICAL CLICK ERROR:", e);
-    alert("Critical Error: " + e.message);
-    resetStartBtn();
-  }
-});
-
 function resetStartBtn() {
   $("startBtn").disabled = false;
   $("startBtn").innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Start Analysis';
 }
 
-$("stopBtn").addEventListener("click", async () => { await fetch("/api/stop", { method: "POST" }); });
-$("resetBtn").addEventListener("click", async () => { if (confirm("Reset system state?")) { await fetch("/api/reset", { method: "POST" }); location.reload(); } });
+async function startScan() {
+  const mailboxes = $("mailboxes").value.trim();
+  const inputs = $("inputs").value.trim();
+
+  if (!mailboxes || !inputs) {
+    alert("Please enter both mailboxes and search inputs before starting.");
+    return;
+  }
+
+  savePrefs();
+
+  $("startBtn").disabled = true;
+  $("stopBtn").disabled = false;
+  $("startBtn").innerHTML = '<svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"></path></svg> Scanning...';
+  $("statusPill").textContent = "SCANNING";
+  $("statusPill").className = "status-pill active";
+  startedAt = Date.now();
+  scanning = true;
+
+  const body = {
+    mailboxes: mailboxes,
+    inputs: inputs,
+    mode: $("mode").value,
+    max_emails: Number($("maxEmails").value) || 0,
+  };
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch(`${EDGE_URL}/scan-mailboxes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${sessionData.session.access_token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      alert(errData.error || "Scan failed");
+      resetStartBtn();
+      $("stopBtn").disabled = true;
+      scanning = false;
+      return;
+    }
+
+    const data = await response.json();
+    if (data.results) {
+      renderResults(data.results);
+      $("statusPill").textContent = "COMPLETED";
+      $("statusPill").className = "status-pill done";
+      $("currentText").textContent = "Scan completed";
+      $("bar").style.width = "100%";
+      $("progressText").textContent = `${(data.results.mailboxes || []).length} / ${(data.results.mailboxes || []).length} mailboxes`;
+      $("percentText").textContent = "100%";
+    }
+  } catch (e) {
+    alert("Scan error: " + e.message);
+  } finally {
+    resetStartBtn();
+    $("stopBtn").disabled = true;
+    scanning = false;
+  }
+}
+
+$("startBtn").addEventListener("click", startScan);
+
+$("stopBtn").addEventListener("click", async () => {
+  $("stopBtn").disabled = true;
+  $("statusPill").textContent = "STOPPING";
+  const { data: sessionData } = await supabase.auth.getSession();
+  const { data: run } = await supabase.from("scan_runs").select("id").eq("user_id", ME.id).eq("status", "running").maybeSingle();
+  if (run) await supabase.from("scan_runs").update({ status: "stopping" }).eq("id", run.id);
+});
+
+$("resetBtn").addEventListener("click", async () => {
+  if (!confirm("Reset system state?")) return;
+  const { data: run } = await supabase.from("scan_runs").select("id").eq("user_id", ME.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (run) await supabase.from("scan_runs").update({ status: "reset", results: null, current: "Reset" }).eq("id", run.id);
+  $("statusPill").textContent = "IDLE";
+  $("statusPill").className = "status-pill";
+  $("bar").style.width = "0%";
+  $("progressText").textContent = "0 / 0 folders";
+  $("percentText").textContent = "0%";
+  $("currentText").textContent = "Ready to start scan";
+  $("log").textContent = "Waiting for initiation...";
+  $("resultsBox").innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">No analysis data available.</div>';
+  $("statInputs").textContent = "0";
+  $("statMailboxes").textContent = "0";
+  $("statSpam").textContent = "0";
+  $("statInbox").textContent = "0";
+});
 
 function startPolling() {
   if (polling) return;
-  polling = setInterval(refreshStatus, 1000);
+  polling = setInterval(refreshStatus, 2000);
   refreshStatus();
 }
 
-let lastResultsJson = "";
 async function refreshStatus() {
+  if (!ME) return;
   try {
-    const data = await (await fetch("/api/status")).json();
-    requestAnimationFrame(() => {
-      renderStatus(data);
-      if (data.results) {
-        const currentJson = JSON.stringify(data.results.inputs.map(i => ({s: i.spam, i: i.inbox})));
-        if (currentJson !== lastResultsJson) {
-          lastResultsJson = currentJson;
-          renderResults(data.results);
-        }
-      }
-    });
-    if (!data.running) {
+    const { data } = await supabase.from("scan_runs").select("*").eq("user_id", ME.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!data) return;
+
+    const running = data.status === "running" || data.status === "stopping";
+    const pill = $("statusPill");
+
+    if (running) {
+      pill.textContent = "SCANNING";
+      pill.className = "status-pill active";
+    } else if (data.results && data.status !== "reset") {
+      pill.textContent = "COMPLETED";
+      pill.className = "status-pill done";
+      if (data.results) renderResults(data.results);
+    } else {
+      pill.textContent = "IDLE";
+      pill.className = "status-pill";
+    }
+
+    const total = data.total || 0;
+    const progress = data.progress || 0;
+    const pct = total ? Math.min(100, Math.round((progress / total) * 100)) : 0;
+
+    $("bar").style.width = pct + "%";
+    $("progressText").textContent = progress + " / " + total + " mailboxes";
+    $("percentText").textContent = pct + "%";
+    $("currentText").textContent = data.current || "Awaiting scan...";
+
+    if (data.started_at && running) {
+      const start = new Date(data.started_at).getTime();
+      $("elapsed").textContent = Math.round((Date.now() - start) / 1000) + "s";
+    }
+
+    if (data.log && data.log.length) {
+      const box = $("log");
+      const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+      box.textContent = data.log.join("\n");
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+
+    if (!running && !scanning) {
       clearInterval(polling);
       polling = null;
       $("startBtn").disabled = false;
@@ -1006,47 +1071,11 @@ async function refreshStatus() {
   } catch (e) { }
 }
 
-function renderStatus(data) {
-  const pill = $("statusPill");
-  if (data.running) {
-    pill.textContent = "SCANNING";
-    pill.className = "status-pill active";
-    $("startBtn").disabled = true;
-    $("stopBtn").disabled = false;
-  } else if (data.results) {
-    pill.textContent = "COMPLETED";
-    pill.className = "status-pill done";
-  } else {
-    pill.textContent = "IDLE";
-    pill.className = "status-pill";
-  }
-  
-  const total = data.total || 0;
-  const progress = data.progress || 0;
-  const pct = total ? Math.min(100, Math.round((progress / total) * 100)) : 0;
-  
-  $("bar").style.width = pct + "%";
-  $("progressText").textContent = progress + " / " + total + " folders";
-  $("percentText").textContent = pct + "%";
-  $("currentText").textContent = data.current || "Awaiting scan...";
-  
-  if (data.started_at && data.running) {
-    const start = new Date(data.started_at).getTime();
-    $("elapsed").textContent = Math.round((Date.now() - start) / 1000) + "s";
-  }
-  
-  if (data.log && data.log.length) {
-    const box = $("log");
-    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
-    box.textContent = data.log.join("\n");
-    if (atBottom) box.scrollTop = box.scrollHeight;
-  }
-}
-
 /* -------- Results Rendering -------- */
 const expandedRows = new Set();
 let currentSort = { key: "none", dir: "desc" };
 
+window.handleSort = handleSort;
 function handleSort(key) {
   if (currentSort.key === key) currentSort.dir = currentSort.dir === "desc" ? "asc" : "desc";
   else { currentSort.key = key; currentSort.dir = "desc"; }
@@ -1126,12 +1155,12 @@ function renderResults(results) {
             ${(m.previews || []).map(p => `
               <div style="font-size: 12px; padding: 8px; border-left: 2px solid var(--primary); background: rgba(99, 102, 241, 0.05); margin-top: 6px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                  <span style="font-weight: 700; color: ${p.folder === 'spam' ? 'var(--warning)' : 'var(--success)'};">${p.folder.toUpperCase()}</span>
+                  <span style="font-weight: 700; color: ${p.folder === 'spam' ? 'var(--warning)' : 'var(--success)'};">${(p.folder || '').toUpperCase()}</span>
                   <span style="color: var(--text-muted); font-size: 11px;">${esc(p.date || '')}</span>
                 </div>
                 <div style="font-weight: 600;">From: ${esc(p.from)}</div>
                 <div style="color: var(--text-muted); margin-top: 2px;">Subject: ${esc(p.subject)}</div>
-                <div style="margin-top: 4px; font-style: italic; color: #cbd5e1;">"...${esc(p.snippet)}..."</div>
+                <div style="margin-top: 4px; font-style: italic; color: #cbd5e1;">"...${esc(p.snippet || '')}..."</div>
               </div>
             `).join('')}
           </div>
@@ -1175,122 +1204,54 @@ $("downloadBtn").addEventListener("click", () => {
 });
 
 /* -------- Initialization -------- */
-window.onerror = function(msg, url, lineNo, columnNo, error) {
-  console.error("GLOBAL ERROR:", msg, error);
-  // Only alert for actual errors, not resource loading issues
-  if (msg.indexOf("Script error") === -1) {
-    alert("Application Error: " + msg + "\nLine: " + lineNo);
-  }
-  return false;
-};
-
 async function boot() {
-  console.log("Booting application...");
   try {
-    let me = { authenticated: false };
-    try { 
-      const res = await fetch("/api/me");
-      if (res.ok) me = await res.json();
-    } catch (e) { console.error("Me check failed:", e); }
-
-    if (!me.authenticated) {
-      console.log("User not authenticated, showing login.");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       $("appShell").style.display = "none";
       $("sidebar").style.display = "none";
       $("authShell").style.display = "flex";
       return;
     }
 
-    ME = me;
-    console.log("Authenticated as:", me.email);
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("id,email,role,mailboxes,created_at")
+      .eq("id", session.user.id)
+      .maybeSingle();
+
+    if (error || !profile) {
+      $("appShell").style.display = "none";
+      $("sidebar").style.display = "none";
+      $("authShell").style.display = "flex";
+      return;
+    }
+
+    ME = profile;
     $("authShell").style.display = "none";
     $("sidebar").style.display = "flex";
     $("appShell").style.display = "block";
-    
-    $("whoami").textContent = me.email;
-    $("avatarLetter").textContent = me.email[0].toUpperCase();
-    if (me.role === "admin") $("navAdmin").style.display = "flex";
-    
-    if (me.mailboxes) {
-      $("mailboxes").value = me.mailboxes;
-      markMboxState(`✓ Loaded ${me.mailboxes.split('\n').filter(l=>l.trim()).length} mailboxes`, true);
+
+    $("whoami").textContent = profile.email;
+    $("avatarLetter").textContent = (profile.email || "U")[0].toUpperCase();
+    if (profile.role === "admin") $("navAdmin").style.display = "flex";
+
+    if (profile.mailboxes) {
+      $("mailboxes").value = profile.mailboxes;
+      markMboxState(`✓ Loaded ${profile.mailboxes.split('\n').filter(l=>l.trim()).length} mailboxes`, true);
     }
-    
-    try { restorePrefs(); } catch(e) { console.error("Restore prefs failed:", e); }
-    try { await loadTests(); } catch(e) { console.error("Load tests failed:", e); }
-    
-    console.log("Attaching engine listeners...");
-    attachEngineListeners();
-    
-    console.log("Starting initial status polling...");
+
+    try { restorePrefs(); } catch(e) {}
+    try { await loadTests(); } catch(e) {}
+
     startPolling();
   } catch (err) {
-    console.error("Boot failed critical:", err);
-    alert("Critical Boot Error: " + err.message);
+    $("appShell").style.display = "none";
+    $("sidebar").style.display = "none";
+    $("authShell").style.display = "flex";
   }
 }
 
-function attachEngineListeners() {
-  // Move the start/stop/reset listeners here to ensure they are attached after boot
-  $("startBtn").onclick = async () => {
-    try {
-      console.log("Start button clicked");
-      const mailboxes = $("mailboxes").value.trim();
-      const inputs = $("inputs").value.trim();
-      
-      if (!mailboxes || !inputs) {
-        alert("Please enter both mailboxes and search inputs before starting.");
-        return;
-      }
-
-      const body = {
-        mailboxes: mailboxes,
-        inputs: inputs,
-        mode: $("mode").value,
-        first_emails: Number($("firstEmails").value) || 0,
-        max_emails: Number($("maxEmails").value) || 0,
-        threads: Number($("threads").value) || 8,
-        turbo_conns: Number($("threads").value) || 8,
-        previews: 5,
-      };
-      
-      console.log("Starting scan with payload:", body);
-      savePrefs();
-      
-      $("startBtn").disabled = true;
-      $("startBtn").innerHTML = '<svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"></path></svg> Initializing...';
-
-      const res = await fetch("/api/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      
-      console.log("Fetch /api/start response status:", res.status);
-      const data = await res.json().catch(() => ({}));
-      
-      if (!res.ok) { 
-        console.error("Start failed:", data);
-        alert(data.error || "Start failed"); 
-        resetStartBtn();
-        return; 
-      }
-      
-      console.log("Scan started successfully");
-      startedAt = Date.now();
-      startPolling();
-    } catch (e) {
-      console.error("CRITICAL CLICK ERROR:", e);
-      alert("Critical Error: " + e.message);
-      resetStartBtn();
-    }
-  };
-
-  $("stopBtn").onclick = async () => { await fetch("/api/stop", { method: "POST" }); };
-  $("resetBtn").onclick = async () => { if (confirm("Reset system state?")) { await fetch("/api/reset", { method: "POST" }); location.reload(); } };
-}
-
-console.log("Script loaded, starting boot.");
 boot();
 </script>
 </body>

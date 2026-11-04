@@ -3,14 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js"
+    "dev": "vite --host 0.0.0.0",
+    "start": "vite --host 0.0.0.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.1",
-    "cookie-parser": "^1.4.7",
-    "express": "^4.21.2",
-    "imapflow": "^1.0.181",
-    "mailparser": "^3.7.2"
+    "@supabase/supabase-js": "^2.49.1"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
   }
 }

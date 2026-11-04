@@ -1,0 +1,13 @@
+{
+  "projectId": "72659560",
+  "functions": {
+    "admin-manage": {
+      "hasChanged": false,
+      "hash": "6a48b668fa34396c3b57f3773154decefc0d7a7177be70d5fd5313751f995d87"
+    },
+    "scan-mailboxes": {
+      "hasChanged": false,
+      "hash": "df1488d5c21923d61376f77692d14cb953b6d27d00695c4d8f499562033641cd"
+    }
+  }
+}

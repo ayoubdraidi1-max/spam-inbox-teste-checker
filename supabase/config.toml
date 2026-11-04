@@ -1,0 +1,5 @@
+[functions.admin-manage]
+verify_jwt = true
+
+[functions.scan-mailboxes]
+verify_jwt = true
