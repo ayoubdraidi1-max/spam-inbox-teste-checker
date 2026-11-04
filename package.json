@@ -1,0 +1,9 @@
+{
+  "name": "mailbox-hit-checker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -c \"import os, subprocess, sys; port=os.environ.get('PORT', '5173'); sys.exit(subprocess.call([sys.executable, 'mailbox hit checker/app.py', '--host', '0.0.0.0', '--port', port]))\"",
+    "start": "npm run dev"
+  }
+}
